@@ -504,7 +504,6 @@ type LogicalMemTable struct {
 	//      select /*+ time_range('2020-02-02 12:10:00', '2020-02-02 13:00:00') */ from metrics_summary_by_label;
 	//      select /*+ time_range('2020-02-02 12:10:00', '2020-02-02 13:00:00') */ from inspection_summary;
 	//      select /*+ time_range('2020-02-02 12:10:00', '2020-02-02 13:00:00') */ from inspection_result;
-	QueryTimeRange QueryTimeRange
 }
 
 // LogicalUnionScan is used in non read-only txn or for scanning a local temporary table whose snapshot data is located in memory.
@@ -719,6 +718,7 @@ func (ds *DataSource) deriveCommonHandleTablePathStats(path *util.AccessPath, co
 		path.Ranges = res.Ranges
 		path.AccessConds = res.AccessConds
 		path.TableFilters = res.RemainedConds
+		path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 		path.EqCondCount = res.EqCondCount
 		path.EqOrInCondCount = res.EqOrInCount
 		path.IsDNFCond = res.IsDNFCond
@@ -734,11 +734,13 @@ func (ds *DataSource) deriveCommonHandleTablePathStats(path *util.AccessPath, co
 		}
 	} else {
 		path.TableFilters = conds
+		path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	}
 	if path.EqOrInCondCount == len(path.AccessConds) {
 		accesses, remained := path.SplitCorColAccessCondFromFilters(ds.ctx, path.EqOrInCondCount)
 		path.AccessConds = append(path.AccessConds, accesses...)
 		path.TableFilters = remained
+		path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 		if len(accesses) > 0 && ds.statisticTable.Pseudo {
 			path.CountAfterAccess = ds.statisticTable.PseudoAvgCountPerValue()
 		} else {
@@ -772,6 +774,7 @@ func (ds *DataSource) deriveTablePathStats(path *util.AccessPath, conds []expres
 	sc := ds.ctx.GetSessionVars().StmtCtx
 	path.CountAfterAccess = float64(ds.statisticTable.Count)
 	path.TableFilters = conds
+	path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(conds, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	var pkCol *expression.Column
 	columnLen := len(ds.schema.Columns)
 	isUnsigned := false
@@ -793,6 +796,7 @@ func (ds *DataSource) deriveTablePathStats(path *util.AccessPath, conds []expres
 		return nil
 	}
 	path.AccessConds, path.TableFilters = ranger.DetachCondsForColumn(ds.ctx, conds, pkCol)
+	path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	// If there's no access cond, we try to find that whether there's expression containing correlated column that
 	// can be used to access data.
 	corColInAccessConds := false
@@ -829,6 +833,7 @@ func (ds *DataSource) deriveTablePathStats(path *util.AccessPath, conds []expres
 		return nil
 	}
 	path.Ranges, err = ranger.BuildTableRange(path.AccessConds, sc, pkCol.RetType)
+	path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	if err != nil {
 		return err
 	}
@@ -875,6 +880,7 @@ func (ds *DataSource) fillIndexPath(path *util.AccessPath, conds []expression.Ex
 		path.Ranges = res.Ranges
 		path.AccessConds = res.AccessConds
 		path.TableFilters = res.RemainedConds
+		path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(res.RemainedConds, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 		path.EqCondCount = res.EqCondCount
 		path.EqOrInCondCount = res.EqOrInCount
 		path.IsDNFCond = res.IsDNFCond
@@ -890,6 +896,7 @@ func (ds *DataSource) fillIndexPath(path *util.AccessPath, conds []expression.Ex
 		}
 	} else {
 		path.TableFilters = conds
+		path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(conds, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	}
 	return nil
 }
@@ -902,6 +909,8 @@ func (ds *DataSource) deriveIndexPathStats(path *util.AccessPath, conds []expres
 		accesses, remained := path.SplitCorColAccessCondFromFilters(ds.ctx, path.EqOrInCondCount)
 		path.AccessConds = append(path.AccessConds, accesses...)
 		path.TableFilters = remained
+		path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
+
 		if len(accesses) > 0 && ds.statisticTable.Pseudo {
 			path.CountAfterAccess = ds.statisticTable.PseudoAvgCountPerValue()
 		} else {
@@ -920,6 +929,7 @@ func (ds *DataSource) deriveIndexPathStats(path *util.AccessPath, conds []expres
 	var indexFilters []expression.Expression
 	indexFilters, path.TableFilters = ds.splitIndexFilterConditions(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	path.IndexFilters = append(path.IndexFilters, indexFilters...)
+	path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	// If the `CountAfterAccess` is less than `stats.RowCount`, there must be some inconsistent stats info.
 	// We prefer the `stats.RowCount` because it could use more stats info to calculate the selectivity.
 	if path.CountAfterAccess < ds.stats.RowCount && !isIm {

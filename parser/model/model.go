@@ -1187,6 +1187,9 @@ func writeSettingItemToBuilder(sb *strings.Builder, item string) {
 
 func (p *PlacementSettings) String() string {
 	sb := new(strings.Builder)
+	if p == nil {
+		return ""
+	}
 	if len(p.PrimaryRegion) > 0 {
 		writeSettingItemToBuilder(sb, fmt.Sprintf("PRIMARY_REGION=\"%s\"", p.PrimaryRegion))
 	}

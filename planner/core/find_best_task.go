@@ -1163,6 +1163,15 @@ func indexCoveringCol(col *expression.Column, indexCols []*expression.Column, id
 	return false
 }
 
+func prefIndexCoveringCol(col *expression.Column, indexCols []*expression.Column, idxColLens []int) bool {
+	for _, indexCol := range indexCols {
+		if indexCol != nil && col.EqualByExprAndID(nil, indexCol) {
+			return true
+		}
+	}
+	return false
+}
+
 func (ds *DataSource) isCoveringIndex(columns, indexColumns []*expression.Column, idxColLens []int, tblInfo *model.TableInfo) bool {
 	for _, col := range columns {
 		if tblInfo.PKIsHandle && mysql.HasPriKeyFlag(col.RetType.Flag) {
@@ -1181,6 +1190,26 @@ func (ds *DataSource) isCoveringIndex(columns, indexColumns []*expression.Column
 			!mysql.HasBinaryFlag(col.GetType().Flag)
 		if !coveredByPlainIndex && coveredByClusteredIndex && isClusteredNewCollationIdx && ds.table.Meta().CommonHandleVersion == 0 {
 			return false
+		}
+	}
+	return true
+}
+
+func (ds *DataSource) isCoveringPrefIndex(conditions []expression.Expression,
+	indexColumns []*expression.Column, idxColLens []int,
+	table *model.TableInfo) bool {
+	for _, cond := range conditions {
+		for _, col := range expression.ExtractColumns(cond) {
+			if table.PKIsHandle && mysql.HasPriKeyFlag(col.RetType.Flag) {
+				continue
+			}
+			if col.ID == model.ExtraHandleID {
+				continue
+			}
+			isCover := prefIndexCoveringCol(col, indexColumns, idxColLens)
+			if !isCover {
+				return false
+			}
 		}
 	}
 	return true
@@ -1227,6 +1256,7 @@ func (ds *DataSource) convertToIndexScan(prop *property.PhysicalProperty, candid
 		return invalidTask, nil
 	}
 	path := candidate.path
+	path.TableCondCoveredByPreIndex = ds.isCoveringPrefIndex(path.TableFilters, path.FullIdxCols, path.FullIdxColLens, ds.tableInfo)
 	is, cost, _ := ds.getOriginalPhysicalIndexScan(prop, path, candidate.isMatchProp, candidate.path.IsSingleScan)
 	cop := &copTask{
 		indexPlan:   is,
@@ -1408,6 +1438,7 @@ func (is *PhysicalIndexScan) addPushedDownSelection(copTask *copTask, p *DataSou
 		copTask.indexPlan = indexSel
 	}
 	if len(tableConds) > 0 {
+		copTask.tableCondCoveredByPreIndex = path.TableCondCoveredByPreIndex
 		copTask.finishIndexPlan()
 		copTask.cst += copTask.count() * sessVars.CopCPUFactor
 		tableSel := PhysicalSelection{Conditions: tableConds}.Init(is.ctx, finalStats, is.blockOffset)

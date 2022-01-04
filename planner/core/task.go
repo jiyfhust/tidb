@@ -89,6 +89,9 @@ type copTask struct {
 
 	// For table partition.
 	partitionInfo PartitionInfo
+
+	// tableConditionConvertByPreIndex indicates if the plan table conditions are covered by PreIndex.
+	tableCondCoveredByPreIndex bool
 }
 
 func (t *copTask) invalid() bool {
