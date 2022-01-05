@@ -149,6 +149,8 @@ type PhysicalProperty struct {
 	// RejectSort means rejecting the sort property from its children, but it only works for MPP tasks.
 	// Non-MPP tasks do not care about it.
 	RejectSort bool
+	// is preIndex match
+	MatchPreIndex bool
 }
 
 // NewPhysicalProperty builds property from columns.

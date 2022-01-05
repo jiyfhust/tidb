@@ -522,7 +522,7 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 		for _, sortItem := range prop.SortItems {
 			found := false
 			for ; i < len(path.IdxCols); i++ {
-				if sortItem.Col.Equal(nil, path.IdxCols[i]) {
+				if (prop.MatchPreIndex || path.IdxColLens[i] == types.UnspecifiedLength) && sortItem.Col.Equal(nil, path.IdxCols[i]) {
 					found = true
 					i++
 					break

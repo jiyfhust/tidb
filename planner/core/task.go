@@ -1330,12 +1330,15 @@ func (p *PhysicalTopN) attach2Task(tasks ...task) task {
 		if !copTask.indexPlanFinished && p.canPushToIndexPlan(copTask.indexPlan, cols) {
 			pushedDownTopN = p.getPushedDownTopN(copTask.indexPlan)
 			copTask.indexPlan = pushedDownTopN
+			copTask.addCost(pushedDownTopN.GetCost(inputCount, false))
+		} else if copTask.tableCondCoveredByPreIndex {
+			copTask.indexPlan = p.getPushedLimit(copTask.indexPlan)
 		} else {
 			copTask.finishIndexPlan()
 			pushedDownTopN = p.getPushedDownTopN(copTask.tablePlan)
 			copTask.tablePlan = pushedDownTopN
+			copTask.addCost(pushedDownTopN.GetCost(inputCount, false))
 		}
-		copTask.addCost(pushedDownTopN.GetCost(inputCount, false))
 	} else if mppTask, ok := t.(*mppTask); ok && needPushDown && p.canPushDown(kv.TiFlash) {
 		pushedDownTopN := p.getPushedDownTopN(mppTask.p)
 		mppTask.p = pushedDownTopN
@@ -1344,6 +1347,18 @@ func (p *PhysicalTopN) attach2Task(tasks ...task) task {
 	rootTask.addCost(p.GetCost(rootTask.count(), true))
 	p.cost = rootTask.cost()
 	return attachPlan2Task(p, rootTask)
+}
+
+func (p *PhysicalTopN) getPushedLimit(childPlan PhysicalPlan) *PhysicalLimit {
+	newCount := p.Offset + p.Count
+	childProfile := childPlan.statsInfo()
+	// Strictly speaking, for the row count of pushed down TopN, we should multiply newCount with "regionNum",
+	// but "regionNum" is unknown since the copTask can be a double read, so we ignore it now.
+	stats := deriveLimitStats(childProfile, float64(newCount))
+	prop := &property.PhysicalProperty{}
+	limit := PhysicalLimit{Count: newCount}.Init(p.ctx, stats, p.blockOffset, prop)
+	limit.SetChildren(childPlan)
+	return limit
 }
 
 // GetCost computes the cost of projection operator itself.
