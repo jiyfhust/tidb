@@ -100,5 +100,9 @@ replace google.golang.org/grpc => google.golang.org/grpc v1.29.1
 
 replace github.com/pingcap/tidb/parser => ./parser
 
+replace github.com/jiyfhust/ddiab => github.com/pingcap/tipb v0.0.0-20211105090418-71142a4d40e3
+
+replace github.com/pingcap/tipb => github.com/pingcap/tipb v0.0.0-20211227115224-a06a85f9d2a5
+
 // fix potential security issue(CVE-2020-26160) introduced by indirect dependency.
 replace github.com/dgrijalva/jwt-go => github.com/form3tech-oss/jwt-go v3.2.6-0.20210809144907-32ab6a8243d7+incompatible

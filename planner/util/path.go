@@ -67,6 +67,19 @@ type AccessPath struct {
 	IsSingleScan bool
 	// tableConditionConvertByPreIndex indicates if the plan table conditions are covered by PreIndex.
 	TableCondCoveredByPreIndex bool
+
+	// a index may have 5 col, but common col only 3, this will be 3.
+	CoveredCount int
+
+	// idx(a, b, c, d, e), where b = 2 order by a,c limit 2. CoveredIndexCount will be 3.
+	CoveredIndexCount int
+
+	// the last common col is prefix col
+	CoveredPreIndex bool
+
+	// the last common col, prefix len
+	PreIndexLen int
+
 }
 
 // IsTablePath returns true if it's IntHandlePath or CommonHandlePath.
