@@ -15,6 +15,7 @@
 package executor
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
 	"errors"
@@ -312,9 +313,10 @@ type TopNExec struct {
 
 	chkHeap *topNChunkHeap
 
-	coveredCount int
+	coveredCount    int
 	coveredPreIndex bool
-	preIndexLen int
+	preIndexLen     int
+	finished        bool
 }
 
 // topNChunkHeap implements heap.Interface.
@@ -460,6 +462,9 @@ func (e *TopNExec) executeTopN(ctx context.Context) error {
 	}
 	childRowChk := newFirstChunk(e.children[0])
 	for {
+		if e.finished {
+			break
+		}
 		err := Next(ctx, e.children[0], childRowChk)
 		if err != nil {
 			return err
@@ -488,7 +493,30 @@ func (e *TopNExec) processChildChk(childRowChk *chunk.Chunk) error {
 		var heapMax, next chunk.Row
 		heapMax = e.rowChunks.GetRow(heapMaxPtr)
 		next = childRowChk.GetRow(i)
-		if e.chkHeap.greaterRow(heapMax, next) {
+		if len(e.rowPtrs) >= int(e.totalLimit) && e.coveredPreIndex && e.preIndexLen > 0 {
+			heapMax = e.rowChunks.GetRow(heapMaxPtr)
+			for j, colIdx := range e.keyColumns {
+				if j < (e.coveredCount - 1) {
+					cmpFunc := e.keyCmpFuncs[j]
+					cmp := cmpFunc(heapMax, colIdx, next, colIdx)
+					if cmp != 0 {
+						e.finished = true
+						break
+					}
+				} else {
+					lNull, rNull := heapMax.IsNull(colIdx), next.IsNull(colIdx)
+					if !lNull && !rNull {
+						col1 := heapMax.GetBytes(colIdx)
+						col2 := next.GetBytes(colIdx)
+						if bytes.Equal(col1[0:e.preIndexLen], col2[0:e.preIndexLen]) {
+							e.finished = true
+							break
+						}
+					}
+				}
+			}
+		}
+		if !e.finished && e.chkHeap.greaterRow(heapMax, next) {
 			// Evict heap max, keep the next row.
 			e.rowPtrs[0] = e.rowChunks.AppendRow(childRowChk.GetRow(i))
 			heap.Fix(e.chkHeap, 0)

@@ -422,10 +422,10 @@ type candidatePath struct {
 	indexFiltersColSet *intsets.Sparse // indexFiltersColSet is the set of columns that occurred in the index filters.
 	isMatchProp        bool
 
-	coveredCount       int
-	coveredIndexCount  int
-        coveredPreIndex    bool
-        preIndexLen        int
+	coveredCount      int
+	coveredIndexCount int
+	coveredPreIndex   bool
+	preIndexLen       int
 }
 
 // compareColumnSet will compares the two set. The last return value is used to indicate
@@ -495,10 +495,10 @@ func compareCandidates(lhs, rhs *candidatePath) int {
 }
 
 func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.PhysicalProperty) bool {
-	path.CoveredCount       = 0
-	path.CoveredIndexCount  = 0
-	path.CoveredPreIndex    = false
-	path.PreIndexLen        = 0
+	path.CoveredCount = 0
+	path.CoveredIndexCount = 0
+	path.CoveredPreIndex = false
+	path.PreIndexLen = 0
 	var isMatchProp bool
 	if path.IsIntHandlePath {
 		pkCol := ds.getPKIsHandleCol()
@@ -553,17 +553,15 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 		return isMatchProp
 	}
 
-
 	if !prop.IsEmpty() && all {
 		// logutil.BgLogger().Error("before isMatchProp", zap.Int("CoveredCount", path.CoveredCount), zap.Int("CoveredIndexCount", path.CoveredIndexCount))
 		isMatchProp = true
 
-		
-		coveredPreIndex     := false
+		coveredPreIndex := false
 
-		coveredCount        := 0
-		coveredIndexCount   := 0
-		preIndexLen         := 0
+		coveredCount := 0
+		coveredIndexCount := 0
+		preIndexLen := 0
 
 		i := 0
 		for _, sortItem := range prop.SortItems {
@@ -571,8 +569,8 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 			for ; i < len(path.IdxCols); i++ {
 				if prop.MatchPreIndex && sortItem.Col.Equal(nil, path.IdxCols[i]) {
 					if path.IdxColLens[i] != types.UnspecifiedLength {
-						coveredPreIndex  = true
-						preIndexLen      = path.IdxColLens[i]
+						coveredPreIndex = true
+						preIndexLen = path.IdxColLens[i]
 					}
 
 					found = true
@@ -596,19 +594,19 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 			}
 		}
 		if coveredCount > 0 {
-			path.CoveredCount       = coveredCount
-			path.CoveredIndexCount  = coveredIndexCount
-			path.CoveredPreIndex    = coveredPreIndex
-			path.PreIndexLen        = preIndexLen
+			path.CoveredCount = coveredCount
+			path.CoveredIndexCount = coveredIndexCount
+			path.CoveredPreIndex = coveredPreIndex
+			path.PreIndexLen = preIndexLen
 		} else {
 			isMatchProp = false
 		}
 		/*
-		k := 0
-		if isMatchProp {
-			k = 10000
-		}
-		logutil.BgLogger().Error("isMatchProp", zap.Int("CoveredCount", path.CoveredCount), zap.Int("CoveredIndexCount", path.CoveredIndexCount), zap.Int("true",k))
+			k := 0
+			if isMatchProp {
+				k = 10000
+			}
+			logutil.BgLogger().Error("isMatchProp", zap.Int("CoveredCount", path.CoveredCount), zap.Int("CoveredIndexCount", path.CoveredIndexCount), zap.Int("true",k))
 		*/
 	}
 	return isMatchProp
@@ -1389,7 +1387,7 @@ func (ds *DataSource) convertToIndexScan(prop *property.PhysicalProperty, candid
 	if candidate.isMatchProp {
 		cop.coveredCount = candidate.coveredCount
 		cop.coveredIndexCount = candidate.coveredIndexCount
-		cop.coveredPreIndex =  candidate.coveredPreIndex
+		cop.coveredPreIndex = candidate.coveredPreIndex
 		cop.preIndexLen = candidate.preIndexLen
 		if cop.tablePlan != nil && !ds.tableInfo.IsCommonHandle {
 			col, isNew := cop.tablePlan.(*PhysicalTableScan).appendExtraHandleCol(ds)
@@ -1517,9 +1515,9 @@ func (is *PhysicalIndexScan) addPushedDownSelection(copTask *copTask, p *DataSou
 	if copTask.coveredCount > 0 && path.TableCondCoveredByPreIndex {
 		// copTask.tableCondCoveredByPreIndex = true
 		/*
-		copTask.coveredCount = path.CoveredCount
-		copTask.coveredPreIndex = path.CoveredPreIndex
-		copTask.preIndexLen = path.PreIndexLen
+			copTask.coveredCount = path.CoveredCount
+			copTask.coveredPreIndex = path.CoveredPreIndex
+			copTask.preIndexLen = path.PreIndexLen
 		*/
 	}
 
