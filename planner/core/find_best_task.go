@@ -522,7 +522,9 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 		for _, sortItem := range prop.SortItems {
 			found := false
 			for ; i < len(path.IdxCols); i++ {
-				if (prop.MatchPreIndex || path.IdxColLens[i] == types.UnspecifiedLength) && sortItem.Col.Equal(nil, path.IdxCols[i]) {
+				//if (prop.MatchPreIndex || path.IdxColLens[i] == types.UnspecifiedLength) && sortItem.Col.Equal(nil, path.IdxCols[i]) {
+				if path.IdxColLens[i] == types.UnspecifiedLength && sortItem.Col.Equal(nil, path.IdxCols[i]) {
+
 					found = true
 					i++
 					break
@@ -536,6 +538,66 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 				break
 			}
 		}
+	}
+
+	if isMatchProp {
+		return isMatchProp
+	}
+
+
+	if !prop.IsEmpty() && all {
+		isMatchProp = true
+
+		
+		coveredPreIndex     := false
+
+		coveredCount        := 0
+		coveredIndexCount   := 0
+		preIndexLen         := 0
+
+		i := 0
+		for _, sortItem := range prop.SortItems {
+			found := false
+			for ; i < len(path.IdxCols); i++ {
+				if prop.MatchPreIndex && sortItem.Col.Equal(nil, path.IdxCols[i]) {
+					if path.IdxColLens[i] == types.UnspecifiedLength {
+						coveredPreIndex  = true
+						preIndexLen      = path.IdxColLens[i]
+					}
+
+					found = true
+					i++
+
+					coveredCount++
+					coveredIndexCount = i
+
+					break
+				}
+				if path.ConstCols == nil || i >= len(path.ConstCols) || !path.ConstCols[i] {
+					break
+				}
+			}
+			if coveredPreIndex {
+				break
+			}
+			if !found {
+				// isMatchProp = false
+				break
+			}
+		}
+		if coveredCount > 0 {
+			path.CoveredCount       = coveredCount
+			path.CoveredIndexCount  = coveredIndexCount
+			path.CoveredPreIndex    = coveredPreIndex
+			path.PreIndexLen        = preIndexLen
+		} else {
+			isMatchProp = false
+		}
+		k := 0
+		if isMatchProp {
+			k = 10000
+		}
+		logutil.BgLogger().Error("isMatchProp", zap.Int("CoveredCount", path.CoveredCount), zap.Int("CoveredIndexCount", path.CoveredIndexCount), zap.Int("true",k))
 	}
 	return isMatchProp
 }
@@ -1424,6 +1486,13 @@ func (is *PhysicalIndexScan) addPushedDownSelection(copTask *copTask, p *DataSou
 	tableConds, newRootConds = expression.PushDownExprs(is.ctx.GetSessionVars().StmtCtx, tableConds, is.ctx.GetClient(), kv.TiKV)
 	copTask.rootTaskConds = append(copTask.rootTaskConds, newRootConds...)
 
+	if path.CoveredCount > 0 && path.TableCondCoveredByPreIndex {
+		copTask.tableCondCoveredByPreIndex = true
+		copTask.coveredCount = path.CoveredCount
+		copTask.coveredPreIndex = path.CoveredPreIndex
+		copTask.preIndexLen = path.PreIndexLen
+	}
+
 	sessVars := is.ctx.GetSessionVars()
 	if indexConds != nil {
 		copTask.cst += copTask.count() * sessVars.CopCPUFactor
@@ -1438,7 +1507,7 @@ func (is *PhysicalIndexScan) addPushedDownSelection(copTask *copTask, p *DataSou
 		copTask.indexPlan = indexSel
 	}
 	if len(tableConds) > 0 {
-		copTask.tableCondCoveredByPreIndex = path.TableCondCoveredByPreIndex
+		//copTask.tableCondCoveredByPreIndex = path.TableCondCoveredByPreIndex
 		copTask.finishIndexPlan()
 		copTask.cst += copTask.count() * sessVars.CopCPUFactor
 		tableSel := PhysicalSelection{Conditions: tableConds}.Init(is.ctx, finalStats, is.blockOffset)

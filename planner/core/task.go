@@ -92,6 +92,10 @@ type copTask struct {
 
 	// tableConditionConvertByPreIndex indicates if the plan table conditions are covered by PreIndex.
 	tableCondCoveredByPreIndex bool
+	coveredCount       int
+	coveredIndexCount  int
+        coveredPreIndex    bool
+        preIndexLen        int
 }
 
 func (t *copTask) invalid() bool {
