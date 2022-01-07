@@ -421,6 +421,11 @@ type candidatePath struct {
 	accessCondsColSet  *intsets.Sparse // accessCondsColSet is the set of columns that occurred in the access conditions.
 	indexFiltersColSet *intsets.Sparse // indexFiltersColSet is the set of columns that occurred in the index filters.
 	isMatchProp        bool
+
+	coveredCount       int
+	coveredIndexCount  int
+        coveredPreIndex    bool
+        preIndexLen        int
 }
 
 // compareColumnSet will compares the two set. The last return value is used to indicate
@@ -490,6 +495,10 @@ func compareCandidates(lhs, rhs *candidatePath) int {
 }
 
 func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.PhysicalProperty) bool {
+	path.CoveredCount       = 0
+	path.CoveredIndexCount  = 0
+	path.CoveredPreIndex    = false
+	path.PreIndexLen        = 0
 	var isMatchProp bool
 	if path.IsIntHandlePath {
 		pkCol := ds.getPKIsHandleCol()
@@ -546,6 +555,7 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 
 
 	if !prop.IsEmpty() && all {
+		// logutil.BgLogger().Error("before isMatchProp", zap.Int("CoveredCount", path.CoveredCount), zap.Int("CoveredIndexCount", path.CoveredIndexCount))
 		isMatchProp = true
 
 		
@@ -560,7 +570,7 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 			found := false
 			for ; i < len(path.IdxCols); i++ {
 				if prop.MatchPreIndex && sortItem.Col.Equal(nil, path.IdxCols[i]) {
-					if path.IdxColLens[i] == types.UnspecifiedLength {
+					if path.IdxColLens[i] != types.UnspecifiedLength {
 						coveredPreIndex  = true
 						preIndexLen      = path.IdxColLens[i]
 					}
@@ -593,11 +603,13 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 		} else {
 			isMatchProp = false
 		}
+		/*
 		k := 0
 		if isMatchProp {
 			k = 10000
 		}
 		logutil.BgLogger().Error("isMatchProp", zap.Int("CoveredCount", path.CoveredCount), zap.Int("CoveredIndexCount", path.CoveredIndexCount), zap.Int("true",k))
+		*/
 	}
 	return isMatchProp
 }
@@ -605,6 +617,12 @@ func (ds *DataSource) isMatchProp(path *util.AccessPath, prop *property.Physical
 func (ds *DataSource) getTableCandidate(path *util.AccessPath, prop *property.PhysicalProperty) *candidatePath {
 	candidate := &candidatePath{path: path}
 	candidate.isMatchProp = ds.isMatchProp(path, prop)
+	if candidate.isMatchProp {
+		candidate.coveredCount = path.CoveredCount
+		candidate.coveredIndexCount = path.CoveredIndexCount
+		candidate.coveredPreIndex = path.CoveredPreIndex
+		candidate.preIndexLen = path.PreIndexLen
+	}
 	candidate.accessCondsColSet = expression.ExtractColumnSet(path.AccessConds)
 	return candidate
 }
@@ -612,6 +630,12 @@ func (ds *DataSource) getTableCandidate(path *util.AccessPath, prop *property.Ph
 func (ds *DataSource) getIndexCandidate(path *util.AccessPath, prop *property.PhysicalProperty) *candidatePath {
 	candidate := &candidatePath{path: path}
 	candidate.isMatchProp = ds.isMatchProp(path, prop)
+	if candidate.isMatchProp {
+		candidate.coveredCount = path.CoveredCount
+		candidate.coveredIndexCount = path.CoveredIndexCount
+		candidate.coveredPreIndex = path.CoveredPreIndex
+		candidate.preIndexLen = path.PreIndexLen
+	}
 	candidate.accessCondsColSet = expression.ExtractColumnSet(path.AccessConds)
 	candidate.indexFiltersColSet = expression.ExtractColumnSet(path.IndexFilters)
 	return candidate
@@ -1363,6 +1387,10 @@ func (ds *DataSource) convertToIndexScan(prop *property.PhysicalProperty, candid
 		}
 	}
 	if candidate.isMatchProp {
+		cop.coveredCount = candidate.coveredCount
+		cop.coveredIndexCount = candidate.coveredIndexCount
+		cop.coveredPreIndex =  candidate.coveredPreIndex
+		cop.preIndexLen = candidate.preIndexLen
 		if cop.tablePlan != nil && !ds.tableInfo.IsCommonHandle {
 			col, isNew := cop.tablePlan.(*PhysicalTableScan).appendExtraHandleCol(ds)
 			cop.extraHandleCol = col
@@ -1486,11 +1514,13 @@ func (is *PhysicalIndexScan) addPushedDownSelection(copTask *copTask, p *DataSou
 	tableConds, newRootConds = expression.PushDownExprs(is.ctx.GetSessionVars().StmtCtx, tableConds, is.ctx.GetClient(), kv.TiKV)
 	copTask.rootTaskConds = append(copTask.rootTaskConds, newRootConds...)
 
-	if path.CoveredCount > 0 && path.TableCondCoveredByPreIndex {
-		copTask.tableCondCoveredByPreIndex = true
+	if copTask.coveredCount > 0 && path.TableCondCoveredByPreIndex {
+		// copTask.tableCondCoveredByPreIndex = true
+		/*
 		copTask.coveredCount = path.CoveredCount
 		copTask.coveredPreIndex = path.CoveredPreIndex
 		copTask.preIndexLen = path.PreIndexLen
+		*/
 	}
 
 	sessVars := is.ctx.GetSessionVars()
@@ -1507,7 +1537,7 @@ func (is *PhysicalIndexScan) addPushedDownSelection(copTask *copTask, p *DataSou
 		copTask.indexPlan = indexSel
 	}
 	if len(tableConds) > 0 {
-		//copTask.tableCondCoveredByPreIndex = path.TableCondCoveredByPreIndex
+		copTask.tableCondCoveredByPreIndex = path.TableCondCoveredByPreIndex
 		copTask.finishIndexPlan()
 		copTask.cst += copTask.count() * sessVars.CopCPUFactor
 		tableSel := PhysicalSelection{Conditions: tableConds}.Init(is.ctx, finalStats, is.blockOffset)

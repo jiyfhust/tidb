@@ -29,6 +29,8 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/disk"
 	"github.com/pingcap/tidb/util/memory"
+	//"github.com/pingcap/tidb/util/logutil"
+	//"go.uber.org/zap"
 )
 
 // SortExec represents sorting executor.
@@ -309,6 +311,10 @@ type TopNExec struct {
 	rowPtrs []chunk.RowPtr
 
 	chkHeap *topNChunkHeap
+
+	coveredCount int
+	coveredPreIndex bool
+	preIndexLen int
 }
 
 // topNChunkHeap implements heap.Interface.
@@ -389,8 +395,10 @@ func (e *TopNExec) Open(ctx context.Context) error {
 
 // Next implements the Executor Next interface.
 func (e *TopNExec) Next(ctx context.Context, req *chunk.Chunk) error {
+	// logutil.BgLogger().Error("TopNNNNNN", zap.Int("coveredCount", e.coveredCount), zap.Int("preIndexLen", e.preIndexLen))
 	req.Reset()
 	if !e.fetched {
+		// logutil.BgLogger().Error("TopN", zap.Int("coveredCount", e.coveredCount), zap.Int("preIndexLen", e.preIndexLen))
 		e.totalLimit = e.limit.Offset + e.limit.Count
 		e.Idx = int(e.limit.Offset)
 		err := e.loadChunksUntilTotalLimit(ctx)

@@ -1744,6 +1744,9 @@ func (b *executorBuilder) buildTopN(v *plannercore.PhysicalTopN) Executor {
 	return &TopNExec{
 		SortExec: sortExec,
 		limit:    &plannercore.PhysicalLimit{Count: v.Count, Offset: v.Offset},
+		coveredCount: v.CoveredCount,
+		coveredPreIndex: v.CoveredPreIndex,
+		preIndexLen: v.PreIndexLen,
 	}
 }
 

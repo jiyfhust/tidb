@@ -1336,6 +1336,9 @@ func (p *PhysicalTopN) attach2Task(tasks ...task) task {
 			copTask.indexPlan = pushedDownTopN
 			copTask.addCost(pushedDownTopN.GetCost(inputCount, false))
 		} else if copTask.tableCondCoveredByPreIndex {
+			p.CoveredCount = copTask.coveredCount
+			p.CoveredPreIndex = copTask.coveredPreIndex
+			p.PreIndexLen = copTask.preIndexLen
 			copTask.indexPlan = p.getPushedLimit(copTask.indexPlan)
 		} else {
 			copTask.finishIndexPlan()

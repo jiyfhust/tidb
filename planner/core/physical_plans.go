@@ -633,6 +633,10 @@ type PhysicalTopN struct {
 	ByItems []*util.ByItems
 	Offset  uint64
 	Count   uint64
+
+	CoveredCount       int
+        CoveredPreIndex    bool
+        PreIndexLen        int
 }
 
 // Clone implements PhysicalPlan interface.
