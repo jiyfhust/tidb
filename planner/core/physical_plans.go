@@ -634,9 +634,10 @@ type PhysicalTopN struct {
 	Offset  uint64
 	Count   uint64
 
-	CoveredCount    int
-	CoveredPreIndex bool
-	PreIndexLen     int
+	CoveredCount      int
+	CoveredPreIndex   bool
+	CoveredIndexCount int
+	PreIndexLen       int
 }
 
 // Clone implements PhysicalPlan interface.
@@ -967,6 +968,9 @@ type PhysicalLimit struct {
 
 	Offset uint64
 	Count  uint64
+
+	coveredPreIndex   bool
+	coveredIndexCount int
 }
 
 // Clone implements PhysicalPlan interface.

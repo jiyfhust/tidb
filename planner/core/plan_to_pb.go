@@ -161,7 +161,9 @@ func (p *PhysicalTopN) ToPB(ctx sessionctx.Context, storeType kv.StoreType) (*ti
 // ToPB implements PhysicalPlan ToPB interface.
 func (p *PhysicalLimit) ToPB(ctx sessionctx.Context, storeType kv.StoreType) (*tipb.Executor, error) {
 	limitExec := &tipb.Limit{
-		Limit: p.Count,
+		Limit:             p.Count,
+		CoveredPreIndex:   p.coveredPreIndex,
+		CoveredIndexCount: int32(p.coveredIndexCount),
 	}
 	executorID := ""
 	if storeType == kv.TiFlash {

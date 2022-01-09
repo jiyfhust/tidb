@@ -92,10 +92,10 @@ type copTask struct {
 
 	// tableConditionConvertByPreIndex indicates if the plan table conditions are covered by PreIndex.
 	tableCondCoveredByPreIndex bool
-	coveredCount       int
-	coveredIndexCount  int
-        coveredPreIndex    bool
-        preIndexLen        int
+	coveredCount               int
+	coveredIndexCount          int
+	coveredPreIndex            bool
+	preIndexLen                int
 }
 
 func (t *copTask) invalid() bool {
@@ -1364,6 +1364,8 @@ func (p *PhysicalTopN) getPushedLimit(childPlan PhysicalPlan) *PhysicalLimit {
 	stats := deriveLimitStats(childProfile, float64(newCount))
 	prop := &property.PhysicalProperty{}
 	limit := PhysicalLimit{Count: newCount}.Init(p.ctx, stats, p.blockOffset, prop)
+	limit.coveredPreIndex = p.CoveredPreIndex
+	limit.coveredIndexCount = p.CoveredIndexCount
 	limit.SetChildren(childPlan)
 	return limit
 }
